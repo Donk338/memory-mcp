@@ -1,0 +1,7 @@
+category: service
+purpose: memory-mcp — live x402 paid memory service repo (mem.borisinc.com)
+owner: system
+reconcile: systemctl is-active memory-mcp.service
+inherits: true
+last_audited: 2026-07-25T19:13:41Z
+by: estate-loop-sonnet-boris

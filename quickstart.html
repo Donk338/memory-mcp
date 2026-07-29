@@ -1,0 +1,59 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>memory-mcp quickstart — paid agent memory in 60 seconds</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Give your AI agent permanent, searchable memory in 60 seconds. Pay per call with USDC on Base via x402. No account, no API key.">
+<link rel="icon" href="https://borisinc.com/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="https://borisinc.com/brand.css?v=1"></head><body>
+<nav class="nav"><a class="brand" href="https://borisinc.com"><img src="https://borisinc.com/favicon.svg" alt="">Boris Inc</a><a href="https://aegis.borisinc.com">Aegis</a><a href="https://mem.borisinc.com" class="here">Memory</a><a href="https://api.borisinc.com">GameDataKit</a><a href="https://tools.borisinc.com">Tools</a><span class="spacer"></span><a href="https://aegis.borisinc.com/buyer">aegis-buy</a></nav>
+<h1>Give your agent permanent memory in 60 seconds</h1>
+<p><strong>mem.borisinc.com</strong> — pay-per-call agent memory. No account, no API key. Your wallet <em>is</em> your namespace: every memory you store is private to the wallet that paid for it, semantically indexed, and retrievable from any agent, framework, or machine. Try it free below, pay per call, or take the $2/month unlimited plan.</p>
+<table><tr><th>call</th><th>price</th></tr>
+<tr><td>write a memory</td><td>$0.001</td></tr>
+<tr><td>semantic search</td><td>$0.002</td></tr>
+<tr><td>export everything</td><td>$0.01</td></tr>
+<tr><td>stats</td><td>free</td></tr>
+<tr><td>trial (5 records, 24h, not private)</td><td>free</td></tr>
+<tr><td>unlimited 30 days (<code>/subscribe</code>)</td><td>$2.00</td></tr></table>
+<h2>0. Try it free — right now, in your browser</h2>
+<pre>https://mem.borisinc.com/trial/memory/write?content=hello memory
+https://mem.borisinc.com/trial/memory/search?query=hello</pre>
+<p class="note">Trial namespaces are IP-derived, capped at 5 records, auto-deleted after 24h and <strong>not private</strong> — they exist so your agent can taste the loop before bringing a wallet.</p>
+<h2>1. Install</h2>
+<pre>pip install x402 eth-account httpx</pre>
+<h2>2. Get a wallet with USDC on Base</h2>
+<p>Have one? Skip ahead. Otherwise:</p>
+<pre>python -c "from eth_account import Account; a=Account.create(); print('address:', a.address); print('key:', a.key.hex())"</pre>
+<p>Send it a little USDC on <strong>Base</strong> (withdraw from Coinbase/Binance/etc — pick the Base network). $1 = 1000 memories.</p>
+<h2>3. First paid call</h2>
+<pre>import uuid, httpx
+from eth_account import Account
+from x402 import x402ClientSync
+from x402.http import x402HTTPClientSync, PaymentRoundTripper
+from x402.mechanisms.evm import EthAccountSigner
+from x402.mechanisms.evm.exact import ExactEvmScheme
+
+acct = Account.from_key("0xYOUR_PRIVATE_KEY")
+client = x402ClientSync()
+client.register("eip155:8453", ExactEvmScheme(EthAccountSigner(acct)))
+rt = PaymentRoundTripper(x402HTTPClientSync(client))
+
+def call(url):
+    with httpx.Client(timeout=60) as s:
+        r = s.get(url)
+        f = rt.handle_response(str(uuid.uuid4()), r.status_code, dict(r.headers), r.content,
+                               lambda h: s.get(url, headers=h))
+        return getattr(f, "text", r.text)
+
+print(call("https://mem.borisinc.com/paid/memory/write?content=My agent remembers this forever"))
+print(call("https://mem.borisinc.com/paid/memory/search?query=what does my agent remember"))</pre>
+<p>That's it. The 402 challenge, payment signing, and on-chain USDC settlement happen inside the round-tripper. You get a settlement receipt header with every response.</p>
+<h2>For MCP-native agents</h2>
+<p>Streamable-HTTP MCP endpoint: <code>https://mem.borisinc.com/mcp</code> — tools <code>memory_write</code>, <code>memory_search</code>, <code>memory_export</code>, <code>memory_stats</code> (free). Payment goes in <code>_meta["x402/payment"]</code>; the <code>x402</code> Python package's <code>x402MCPSession</code> handles it.</p>
+<h2>Unlimited plan ($2 / 30 days)</h2>
+<p>Heavy user? One x402 payment to <code>GET /subscribe</code> returns a bearer token bound to your wallet. Send <code>Authorization: Bearer mem_...</code> on any paid endpoint and skip per-call payments for 30 days.</p>
+<h2>Shared memory — one brain, many agents</h2>
+<p>The namespace owner signs an EIP-712 grant (build it with free <code>GET /grant/payload?namespace=&amp;grantee=&amp;mode=read|write|rw&amp;days=30</code>), then any grantee agent adds <code>on_behalf=&lt;owner&gt;&amp;grant=&lt;base64 blob&gt;</code> to its own paid calls. Research agent writes, execution agent reads — cryptographically scoped, max 90 days, EOA signatures in v1.</p>
+<h2>Agent-keyed memory (ERC-8004)</h2>
+<p>Add <code>agent_id=&lt;your agentId&gt;</code> to any call and your memory binds to your on-chain agent identity (<code>agent:8453:N</code>) instead of a bare wallet — rotate wallets via <code>setAgentWallet</code> and your memory follows the agent. Requires your paying wallet to be the agent's attested <code>agentWallet</code> in the Base IdentityRegistry.</p>
+<h2>Why trust this?</h2>
+<p>Independently monitored: listed on <a href="https://www.x402scan.com">x402scan</a>, probed by x402-trust, scored <strong>87.5 "verified"</strong> on <a href="https://aegis.borisinc.com">Aegis</a> continuous verification. Machine-readable docs: <a href="/llms.txt">/llms.txt</a> · <a href="/openapi.json">/openapi.json</a>. Runs on independent hardware (no cloud), settled on Base mainnet via USDC.</p>
+<p class="note">Also from the same rig: <a href="https://aegis.borisinc.com">Aegis</a> — the ERC-8004-bridged trust registry verifying 960+ x402 services (on-chain agent #58766) — and <a href="https://api.borisinc.com">GameDataKit</a>, live Steam market data.</p>
+</body></html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory — persistent memory for AI agents | Boris Inc</title>
+<meta name="description" content="Wallet-keyed persistent memory for AI agents: write, semantic search, export. MCP + HTTP, paid per call via x402. From $0.001.">
+<meta property="og:title" content="Memory — persistent memory for AI agents">
+<meta property="og:description" content="Your wallet is your memory. Write, search and export durable agent memory via MCP or HTTP, paid per call via x402.">
+<meta property="og:type" content="website"><meta property="og:url" content="https://mem.borisinc.com/">
+<link rel="icon" href="https://borisinc.com/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://borisinc.com/brand.css?v=1">
+</head><body>
+<nav class="nav"><a class="brand" href="https://borisinc.com"><img src="https://borisinc.com/favicon.svg" alt="">Boris Inc</a><a href="https://aegis.borisinc.com">Aegis</a><a href="https://mem.borisinc.com" class="here">Memory</a><a href="https://api.borisinc.com">GameDataKit</a><a href="https://tools.borisinc.com">Tools</a><span class="spacer"></span><a href="https://aegis.borisinc.com/buyer">aegis-buy</a></nav>
+<h1>Memory</h1>
+<p class="muted">Persistent memory for AI agents — <b>your wallet is your memory.</b> Durable across sessions, hosts and frameworks. Paid per call via <a href="https://x402.org">x402</a> (USDC on Base). No account. No API key.</p>
+<div class="card"><h2>Pricing</h2>
+<table>
+<tr><th>Operation</th><th>Price</th></tr>
+<tr><td><code>memory_write</code> / <code>POST /paid/memory/write</code></td><td>$0.001</td></tr>
+<tr><td><code>memory_search</code> (semantic) / <code>/paid/memory/search</code></td><td>$0.002</td></tr>
+<tr><td><code>memory_export</code> / <code>/paid/memory/export</code></td><td>$0.01</td></tr>
+<tr><td><code>memory_stats</code> / <code>/memory/stats</code></td><td>free</td></tr>
+<tr><td>Subscription — 30 days unlimited ops, wallet-bound token</td><td>$2.00</td></tr>
+</table>
+<p class="muted">Free trial, no payment: <code>/trial/memory/write</code> (5 records, 24h) and <code>/trial/memory/search</code>.</p></div>
+<div class="card"><h2>Connect</h2>
+<p>MCP (streamable HTTP): <code>https://mem.borisinc.com/mcp</code></p>
+<pre><code>{ "mcpServers": { "memory": { "url": "https://mem.borisinc.com/mcp" } } }</code></pre>
+<p>HTTP: <code>curl "https://mem.borisinc.com/paid/memory/search?query=..."</code> &rarr; 402 challenge &rarr; pay &rarr; results.</p>
+<p class="muted"><a href="/quickstart">Quickstart (wallet &rarr; first paid call)</a> · <a href="/llms.txt">llms.txt</a> · <a href="/openapi.json">OpenAPI</a></p></div>
+<div class="card"><h2>Namespaces</h2>
+<p><b>Wallet</b> (default) — memory keyed to the paying address. <b>Agent</b> — ERC-8004 agent-keyed via on-chain <code>setAgentWallet</code>, so memory survives wallet rotation. <b>Shared</b> — owner-signed EIP-712 grants (read / write / rw, max 90 days) for delegating memory across agents.</p></div>
+<p class="muted">Runs on independent hardware. A <a href="https://borisinc.com">Boris Inc</a> product — trust-verified on <a href="https://aegis.borisinc.com">Aegis</a> (delivery-proven, not self-reported).</p>
+<footer class="foot">Boris Inc — infrastructure for the machine economy. Pay-per-call via x402 (USDC on Base) · no accounts, no API keys · independent hardware.<br><a href="https://aegis.borisinc.com">Aegis</a> · <a href="https://mem.borisinc.com">Memory</a> · <a href="https://api.borisinc.com">GameDataKit</a> · <a href="https://tools.borisinc.com">Tools</a> · <a href="https://aegis.borisinc.com/buyer">buyer client</a> · <a href="/llms.txt">llms.txt</a> · ERC-8004 on Base</footer>
+</body></html>

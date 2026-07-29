@@ -1,0 +1,12 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "com.borisinc/memory",
+  "description": "Persistent agent memory paid per call via x402 USDC. Your wallet is your private memory namespace.",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mem.borisinc.com/mcp"
+    }
+  ]
+}

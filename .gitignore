@@ -1,0 +1,11 @@
+# estate-loop hardening 2026-07-22 (ref attention #757) - repo had NO .gitignore
+config.env
+*.env
+.env
+.env.*
+*.pem
+*.key
+*.db
+__pycache__/
+*.pyc
+.rollback/

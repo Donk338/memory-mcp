@@ -1,0 +1,32 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Boris Memory",
+  "description": "Persistent agent memory paid per call via x402 (USDC on Base). Your wallet is your private memory namespace \u2014 no signup, no API key. Semantic (embedding) search. write $0.001 / search $0.002 / export $0.01; stats free. MCP + HTTP.",
+  "image": "https://borisinc.com/favicon.svg",
+  "services": [
+    {
+      "name": "web",
+      "endpoint": "https://mem.borisinc.com"
+    },
+    {
+      "name": "MCP",
+      "endpoint": "https://mem.borisinc.com/mcp",
+      "version": "2025-06-18"
+    },
+    {
+      "name": "email",
+      "endpoint": "donk.boris@mailfence.com"
+    }
+  ],
+  "x402Support": true,
+  "active": true,
+  "registrations": [
+    {
+      "agentId": 58828,
+      "agentRegistry": "eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+    }
+  ],
+  "supportedTrust": [
+    "reputation"
+  ]
+}
