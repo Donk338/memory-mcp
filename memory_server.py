@@ -958,7 +958,7 @@ async def wk_x402():
             "guarantee": "your wallet is your namespace — no account, no API key"}
 
 
-@fapp.get("/.well-known/agent-registration.json")
+@fapp.get("/.well-known/agent-registration.json", openapi_extra={"security": []})
 async def agent_registration_json():
     """ERC-8004 registration file (spec registration-v1)."""
     from pathlib import Path as _P
