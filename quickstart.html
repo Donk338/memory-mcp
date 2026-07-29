@@ -9,6 +9,8 @@
 <tr><td>write a memory</td><td>$0.001</td></tr>
 <tr><td>semantic search</td><td>$0.002</td></tr>
 <tr><td>export everything</td><td>$0.01</td></tr>
+<tr><td>forget (delete by id, ≤100/call)</td><td>$0.001</td></tr>
+<tr><td>import (bulk-write, ≤200/call)</td><td>$0.01</td></tr>
 <tr><td>stats</td><td>free</td></tr>
 <tr><td>trial (5 records, 24h, not private)</td><td>free</td></tr>
 <tr><td>unlimited 30 days (<code>/subscribe</code>)</td><td>$2.00</td></tr></table>
@@ -46,7 +48,17 @@ print(call("https://mem.borisinc.com/paid/memory/write?content=My agent remember
 print(call("https://mem.borisinc.com/paid/memory/search?query=what does my agent remember"))</pre>
 <p>That's it. The 402 challenge, payment signing, and on-chain USDC settlement happen inside the round-tripper. You get a settlement receipt header with every response.</p>
 <h2>For MCP-native agents</h2>
-<p>Streamable-HTTP MCP endpoint: <code>https://mem.borisinc.com/mcp</code> — tools <code>memory_write</code>, <code>memory_search</code>, <code>memory_export</code>, <code>memory_stats</code> (free). Payment goes in <code>_meta["x402/payment"]</code>; the <code>x402</code> Python package's <code>x402MCPSession</code> handles it.</p>
+<p>Streamable-HTTP MCP endpoint: <code>https://mem.borisinc.com/mcp</code> — tools <code>memory_write</code>, <code>memory_search</code>, <code>memory_export</code>, <code>memory_forget</code>, <code>memory_import</code>, <code>memory_stats</code> (free). Payment goes in <code>_meta["x402/payment"]</code>; the <code>x402</code> Python package's <code>x402MCPSession</code> handles it.</p>
+<h2>Free wallet tier — zero payment, real memory</h2>
+<p>Prove you own a wallet instead of paying: sign <code>borismem-free:&lt;address&gt;:&lt;ts&gt;</code>
+(EIP-191 <code>personal_sign</code>, <code>ts</code> = current unix time) and send it as base64 JSON
+<code>{address, ts, signature}</code> in header <code>X-Wallet-Auth</code> on
+<code>GET /free/memory/write</code> / <code>GET /free/memory/search</code> — no payment, no account.
+This writes into the <strong>same namespace</strong> your paid calls use. Capped at 1000 writes +
+500 searches per wallet per rolling 30 days; over cap you get a 402 pointing at the paid tier or
+<code>/subscribe</code>. MCP-native agents: tools <code>memory_write_free</code> /
+<code>memory_search_free</code> take the same base64 blob as a <code>wallet_auth</code> argument.</p>
+
 <h2>Unlimited plan ($2 / 30 days)</h2>
 <p>Heavy user? One x402 payment to <code>GET /subscribe</code> returns a bearer token bound to your wallet. Send <code>Authorization: Bearer mem_...</code> on any paid endpoint and skip per-call payments for 30 days.</p>
 <h2>Shared memory — one brain, many agents</h2>

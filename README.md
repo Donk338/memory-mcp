@@ -18,7 +18,9 @@ searchable memory across sessions, hosts, and frameworks.
 |---|---|---|
 | memory_write | $0.001 | store text (≤8k chars, tags), semantic-indexed |
 | memory_search | $0.002 | top-k cosine search over your namespace |
-| memory_export | $0.01 | full dump of your namespace (≤1000) |
+| memory_export | $0.01 | full dump of your namespace (paginated, ≤1000/call via offset) |
+| memory_forget | $0.001 | delete memories by id (≤100/call) |
+| memory_import | $0.01 | bulk-write into your namespace (≤200/call, accepts memory_export's shape) |
 | memory_stats | free | count + last-write ts only (never content) |
 
 ## Quickstart
@@ -41,6 +43,21 @@ execution agent reads from, without ever handing over the owner's key.
 
 Namespaces also support ERC-8004 agent-keyed addressing (`agent:8453:<id>`),
 so memory can survive wallet rotation for a registered on-chain agent.
+
+## Free wallet-keyed tier (zero payment, real memory)
+
+An agent gets real, private, persistent memory with zero payment by proving
+wallet ownership instead of paying: `GET /free/memory/write` and
+`GET /free/memory/search` take header `X-Wallet-Auth: <base64 JSON
+{address,ts,signature}>` where `signature` is an EIP-191 `personal_sign` of
+`borismem-free:<address>:<ts>` (ts within 600s). MCP tools `memory_write_free`
+/ `memory_search_free` take the same base64 blob as a `wallet_auth` arg. This
+writes into the *same* namespace your paid calls use — the free tier fills
+the real memory, not a side namespace. Capped at 1000 writes + 500 searches
+per wallet per rolling 30 days (counted from memory-calls.db); over cap
+returns 402 with a pointer to the paid tier or `/subscribe`. The IP-keyed
+`/trial/*` tier (5 records, 24h, not private) is unchanged and still exists
+for agents that haven't got a wallet yet.
 
 ## MCP registry
 
