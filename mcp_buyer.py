@@ -8,7 +8,10 @@ from x402.mcp.client import x402MCPSession
 from x402.mechanisms.evm import EthAccountSigner
 from x402.mechanisms.evm.exact import ExactEvmScheme
 
-env = dict(l.strip().split("=", 1) for l in open("/home/donk/aegis/agent-test.env") if "=" in l)
+import os
+from pathlib import Path
+_AGENT_ENV = Path(os.environ.get("AEGIS_DIR") or Path(__file__).resolve().parent.parent / "aegis") / "agent-test.env"
+env = dict(l.strip().split("=", 1) for l in open(_AGENT_ENV) if "=" in l)
 acct = Account.from_key(env["AGENT_TEST_KEY"])
 print("buyer wallet:", acct.address, flush=True)
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8407/mcp"

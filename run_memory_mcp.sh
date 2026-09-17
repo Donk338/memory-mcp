@@ -13,8 +13,8 @@
 # Idempotent: if something is already listening on PORT, it exits 0 without touching it.
 
 set -u
-REPO=/home/donk/memory-mcp
-VENV=/home/donk/memory-mcp-venv
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="${MEMORY_MCP_VENV:-$REPO-venv}"
 PORT=8407
 LOG=$REPO/logs/memory-mcp.log
 

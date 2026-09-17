@@ -65,4 +65,4 @@ Registered on the MCP registry as **`com.borisinc/memory`**
 (`https://mem.borisinc.com/mcp`, streamable-http).
 
 Ops: `memory-mcp.service` :8407, ledger memory-calls.db, store memories.db,
-embeddings via donk GPU (1024-dim). Test client: mcp_buyer.py.
+embeddings via the local GPU embedder (1024-dim). Test client: mcp_buyer.py.

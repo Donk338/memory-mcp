@@ -1,6 +1,7 @@
 """Offline tests for trial/sub/grant/agent-ns features."""
 import base64, json, sys, time
-sys.path.insert(0, "/home/donk/memory-mcp")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory_server as M
 from eth_account import Account
 

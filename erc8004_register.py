@@ -2,12 +2,13 @@
 """Register Boris Memory (mem.borisinc.com) as an ERC-8004 agent on Base.
 Reuses Aegis's erc8004 primitives. Broadcast is operator-run (--live + key source).
 Usage: erc8004_register.py [--live --key-config ANCHOR_PRIVATE_KEY] | [--finalize AGENT_ID]"""
-import json, sys, time
+import json, os, sys, time
 from pathlib import Path
-sys.path.insert(0, "/home/donk/aegis")
+sys.path.insert(0, str(_AEGIS_DIR))
 import erc8004
 
 BASE = Path(__file__).parent
+_AEGIS_DIR = Path(os.environ.get("AEGIS_DIR") or Path(__file__).resolve().parent.parent / "aegis")
 REG_FILE = BASE / "agent-registration.json"
 REG_URI = "https://mem.borisinc.com/.well-known/agent-registration.json"
 META = dict(
@@ -33,12 +34,12 @@ def main(argv):
     print(f"registration file -> {REG_FILE} (served at {REG_URI})")
     print(f"register(string) tx: to={erc8004.IDENTITY} ({len(data)//2-1} bytes)")
     if "--live" not in argv:
-        print("DRY RUN — rerun with --live --key-config ANCHOR_PRIVATE_KEY (reads /home/donk/aegis/config.env)")
+        print("DRY RUN — rerun with --live --key-config ANCHOR_PRIVATE_KEY (reads $AEGIS_DIR/config.env)")
         return
     key = None
     if "--key-config" in argv:
         name = argv[argv.index("--key-config") + 1]
-        cfg = dict(l.strip().split("=", 1) for l in open("/home/donk/aegis/config.env") if "=" in l)
+        cfg = dict(l.strip().split("=", 1) for l in open(_AEGIS_DIR / "config.env") if "=" in l)
         key = cfg.get(name)
     if "--key-env" in argv:
         import os; key = os.environ.get(argv[argv.index("--key-env") + 1])

@@ -12,10 +12,6 @@
       "name": "MCP",
       "endpoint": "https://mem.borisinc.com/mcp",
       "version": "2025-06-18"
-    },
-    {
-      "name": "email",
-      "endpoint": "donk.boris@mailfence.com"
     }
   ],
   "x402Support": true,

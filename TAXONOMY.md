@@ -72,11 +72,14 @@ The auditor is pure-stdlib Python and location-agnostic:
   TAXONOMY.md + its `.registry.yml` markers, so it stays auditable wherever it lives.
 
 **Catalogued locations (the estate map):**
-| Location | Host | Category | Status |
+Estate-specific hosts and paths are deliberately **not** listed here — this file ships in public repos.
+The map lives in the private registry; each location carries its own marker set.
+
+| Location class | Host class | Category | Status |
 |---|---|---|---|
-| `~/ouroboros-repo` | donk (WSL) | live code + memory | 100% (20 markers) |
-| `D:\Stuff` (`/mnt/d/Stuff`) | Windows host | archive/data junk-drawer | 100% (9 markers, self-contained) |
-| boris service repos (agent-rails, aegis, x402algo, memory-mcp) | boris (WSL) | service/code | 100% (16 markers: agent-rails 9, aegis 4, x402algo 2, memory-mcp 1 — self-contained, verified 2026-07-22) |
+| primary estate repo | WSL host | live code + memory | 100% (self-contained) |
+| archive drive | Windows host | archive/data junk-drawer | 100% (self-contained) |
+| internal service repos | service host (WSL) | service/code | 100% (self-contained) |
 
 ## Value mining — "always be mining"
 

@@ -1,6 +1,6 @@
 """memory-mcp — persistent agent memory sold per-call via x402. Port 8407.
 Namespace = payer wallet address (your wallet is your memory)."""
-import asyncio, base64, contextlib, json, re, sqlite3, time
+import asyncio, base64, contextlib, json, os, re, sqlite3, time
 from pathlib import Path
 
 import httpx
@@ -15,6 +15,11 @@ from x402.mcp import create_payment_wrapper_sync
 from x402.mcp.types import SyncPaymentWrapperConfig, ResourceInfo, MCPToolResult
 
 BASE = Path(__file__).parent
+# Host-local paths are configurable, never hardcoded (this repo is public).
+_AEGIS_DIR = Path(os.environ.get("AEGIS_DIR") or Path(__file__).resolve().parent.parent / "aegis")
+_CONTACT = {"name": "Boris Inc", "url": "https://borisinc.com"}
+if os.environ.get("MEMORY_CONTACT_EMAIL"):
+    _CONTACT["email"] = os.environ["MEMORY_CONTACT_EMAIL"]
 cfg = dict(l.strip().split("=", 1) for l in open(BASE / "config.env") if "=" in l)
 PAY_TO, NETWORK, EMBED_URL = cfg["PAY_TO_ADDRESS"], cfg["NETWORK"], cfg["EMBED_URL"]
 MEMDB, CALLDB = BASE / "memories.db", BASE / "memory-calls.db"
@@ -142,7 +147,7 @@ def _agent_ns(agent_id, payer):
     row = c.execute("SELECT wallet, ts FROM agent_wallet_cache WHERE agent_id=?", (int(agent_id),)).fetchone()
     if not row or time.time() - row[1] > 3600:
         import sys as _s
-        if "/home/donk/aegis" not in _s.path: _s.path.insert(0, "/home/donk/aegis")
+        if str(_AEGIS_DIR) not in _s.path: _s.path.insert(0, str(_AEGIS_DIR))
         import erc8004 as _e
         w = _e.get_agent_wallet(int(agent_id)).lower()
         c.execute("""INSERT INTO agent_wallet_cache(agent_id,wallet,ts) VALUES(?,?,?)
@@ -524,7 +529,8 @@ server = Server("memory-mcp")
 
 # --- Boris Inc web layer v2 -------------------------------------------------
 from pathlib import Path as _WPath
-_WEB_DIST = _WPath("/home/donk/borisinc-web/dist")
+_WEB_DIST = _WPath(os.environ["BORISINC_WEB_DIST"]) if os.environ.get("BORISINC_WEB_DIST")\
+    else _WPath(__file__).resolve().parent.parent / "borisinc-web" / "dist"
 _web_cache: dict = {}
 def web_asset(name: str) -> str:
     try:
@@ -602,7 +608,7 @@ async def lifespan(app):
 
 fapp = FastAPI(title="memory-mcp", version="1.0.0",
     description="Persistent memory for AI agents, paid per call via x402 (USDC, Base mainnet) — your wallet is your private, semantically-indexed memory namespace. Write $0.001, search $0.002, export $0.01; free trial + $2/30d unlimited subscription. MCP + HTTP. No account, no API key.",
-    contact={"name": "Boris Inc", "email": "donk.boris@mailfence.com", "url": "https://borisinc.com"},
+    contact=_CONTACT,
     docs_url=None, lifespan=lifespan)
 
 afacilitator = HTTPFacilitatorClient(FacilitatorConfig(url=cfg["FACILITATOR_URL"]))

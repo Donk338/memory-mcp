@@ -6,7 +6,10 @@ from x402.http import x402HTTPClientSync, PaymentRoundTripper
 from x402.mechanisms.evm import EthAccountSigner
 from x402.mechanisms.evm.exact import ExactEvmScheme
 
-env = dict(l.strip().split("=", 1) for l in open("/home/donk/aegis/agent-test.env") if "=" in l)
+import os
+from pathlib import Path
+_AGENT_ENV = Path(os.environ.get("AEGIS_DIR") or Path(__file__).resolve().parent.parent / "aegis") / "agent-test.env"
+env = dict(l.strip().split("=", 1) for l in open(_AGENT_ENV) if "=" in l)
 acct = Account.from_key(env["AGENT_TEST_KEY"])
 print("wallet:", acct.address, flush=True)
 client = x402ClientSync()
