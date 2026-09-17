@@ -9,3 +9,4 @@ config.env
 __pycache__/
 *.pyc
 .rollback/
+logs/
