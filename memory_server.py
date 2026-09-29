@@ -636,26 +636,26 @@ def _x402_items(entries, network, pay_to):
 HTTP_PRICES = {"/paid/memory/write": "$0.001", "/paid/memory/search": "$0.002", "/paid/memory/export": "$0.01", "/paid/memory/forget": "$0.001", "/paid/memory/import": "$0.01"}
 http_routes = {
     "GET /paid/memory/write": {**accepts("$0.001"), "extensions": declare_discovery_extension(
-        input={"type": "http", "method": "GET"},
+        input={"content": "User prefers metric units", "tags": "prefs"},
         input_schema={"properties": {"content": {"type": "string", "description": "Memory text to store (max 8000 chars)"},
                                      "tags": {"type": "string", "description": "Comma-separated tags"}}, "required": ["content"]},
         output=OutputConfig(example={"id": 42, "namespace": "0xabc...", "embedded": True}))},
     "GET /paid/memory/search": {**accepts("$0.002"), "extensions": declare_discovery_extension(
-        input={"type": "http", "method": "GET"},
+        input={"query": "what does the user prefer?"},
         input_schema={"properties": {"query": {"type": "string", "description": "Semantic search query"},
                                      "k": {"type": "integer", "description": "Max results (default 5, cap 20)"}}, "required": ["query"]},
         output=OutputConfig(example={"namespace": "0xabc...", "results": [{"id": 42, "score": 0.83, "content": "User prefers metric units"}]}))},
     "GET /paid/memory/export": {**accepts("$0.01"), "extensions": declare_discovery_extension(
-        input={"type": "http", "method": "GET"},
+        input={"offset": 0},
         input_schema={"properties": {"offset": {"type": "integer", "description": "row offset for paging past the first 1000 (default 0)"}}},
         output=OutputConfig(example={"namespace": "0xabc...", "count": 2, "offset": 0, "has_more": False, "memories": [{"id": 42, "content": "..."}]}))},
     "GET /paid/memory/forget": {**accepts("$0.001"), "extensions": declare_discovery_extension(
-        input={"type": "http", "method": "GET"},
+        input={"ids": "41,42"},
         input_schema={"properties": {"ids": {"type": "string", "description": "Comma-separated memory ids to delete (max 100)"}},
                      "required": ["ids"]},
         output=OutputConfig(example={"namespace": "0xabc...", "requested": 2, "deleted_count": 2, "deleted_ids": [41, 42]}))},
     "GET /paid/memory/import": {**accepts("$0.01"), "extensions": declare_discovery_extension(
-        input={"type": "http", "method": "GET"},
+        input={"memories": '[{"content": "User prefers metric units"}]'},
         input_schema={"properties": {"memories": {"type": "string",
                                                    "description": "JSON-encoded array of {content, tags?, ts?} (max 200 items)"}},
                      "required": ["memories"]},
