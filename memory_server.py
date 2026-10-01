@@ -1,6 +1,6 @@
 """memory-mcp — persistent agent memory sold per-call via x402. Port 8407.
 Namespace = payer wallet address (your wallet is your memory)."""
-import asyncio, base64, contextlib, json, os, re, sqlite3, time
+import asyncio, base64, contextlib, contextvars, json, os, re, sqlite3, time
 from pathlib import Path
 
 import httpx
@@ -40,16 +40,44 @@ def _mem():
 def _calls():
     c = sqlite3.connect(CALLDB)
     c.execute("""CREATE TABLE IF NOT EXISTS calls(
-        id INTEGER PRIMARY KEY, ts REAL, tool TEXT, ns TEXT, paid INT, price TEXT, latency_ms REAL, err TEXT)""")
+        id INTEGER PRIMARY KEY, ts REAL, tool TEXT, ns TEXT, paid INT, price TEXT,
+        latency_ms REAL, err TEXT, caller TEXT, ua TEXT)""")
     return c
-_mem().close(); _calls().close()
 
-def log_call(tool, ns, paid, price, t0, err=""):
+def _migrate_calls():
+    """Idempotent additive migration: ledgers written before 2026-10-01 predate
+    caller/ua, so the funnel could not tell a buyer from a crawler."""
     with contextlib.suppress(Exception):
         c = _calls()
-        c.execute("INSERT INTO calls(ts,tool,ns,paid,price,latency_ms,err) VALUES(?,?,?,?,?,?,?)",
-                  (t0, tool, ns, paid, price, (time.time() - t0) * 1000, err[:200]))
+        have = {r[1] for r in c.execute("PRAGMA table_info(calls)")}
+        for col in ("caller", "ua"):
+            if col not in have:
+                c.execute(f"ALTER TABLE calls ADD COLUMN {col} TEXT")
         c.commit(); c.close()
+
+_mem().close(); _migrate_calls()
+
+# Request-scoped caller identity, published by the call_log middleware so EVERY
+# ledger write (paid x402 lane AND free/trial lanes) records who called.
+_caller_ctx = contextvars.ContextVar("caller_ctx", default=("", ""))
+
+def log_call(tool, ns, paid, price, t0, err=""):
+    caller, ua = _caller_ctx.get()
+    with contextlib.suppress(Exception):
+        c = _calls()
+        c.execute("INSERT INTO calls(ts,tool,ns,paid,price,latency_ms,err,caller,ua) VALUES(?,?,?,?,?,?,?,?,?)",
+                  (t0, tool, ns, paid, price, (time.time() - t0) * 1000, err[:200], caller[:64], ua[:200]))
+        c.commit(); c.close()
+
+def _caller_ip(request):
+    """Best-effort real client IP, instrumentation only -- never used for auth.
+    We sit behind a tunnel/proxy so the socket peer is loopback; trust edge
+    headers in order of specificity, falling back to the socket peer."""
+    for h in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
+        v = request.headers.get(h)
+        if v:
+            return v.split(",")[0].strip()[:64]
+    return (request.client.host if request.client else "")[:64]
 
 # Cached embedder-reachability state, updated opportunistically by every real
 # embed() call and (if stale) by a throttled active probe from /health. Never
@@ -710,8 +738,12 @@ async def x402_body_mirror(request: Request, call_next):
     return resp
 
 @fapp.middleware("http")
-async def call_log(request, call_next):
-    t0 = time.time(); resp = await call_next(request)
+async def call_log(request: Request, call_next):
+    t0 = time.time()
+    # Publish caller identity for the whole request BEFORE any handler runs, so
+    # paid, free and trial ledger rows all carry it.
+    _caller_ctx.set((_caller_ip(request), request.headers.get("user-agent", "")))
+    resp = await call_next(request)
     with contextlib.suppress(Exception):
         p = request.url.path
         if p.startswith("/paid/"):
