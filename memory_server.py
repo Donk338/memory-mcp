@@ -662,27 +662,41 @@ def _x402_items(entries, network, pay_to):
     return out
 
 HTTP_PRICES = {"/paid/memory/write": "$0.001", "/paid/memory/search": "$0.002", "/paid/memory/export": "$0.01", "/paid/memory/forget": "$0.001", "/paid/memory/import": "$0.01"}
+_ROUTE_META = {
+    "write":  "Store one memory (semantically indexed) in your wallet's private namespace. $0.001 via x402.",
+    "search": "Semantic search over your wallet's private memory namespace. $0.002 via x402.",
+    "export": "Export everything in your namespace for portability or migration. $0.01 via x402.",
+    "forget": "Delete memories by id from your namespace (max 100 per call). $0.001 via x402.",
+    "import": "Bulk-write memories (max 200 per call); accepts the memory_export shape, for one-call namespace migration. $0.01 via x402.",
+}
+
+
+def _meta(op):
+    """Description/mimeType/serviceName/tags for the x402 402 challenge + bazaar catalogue."""
+    return {"description": _ROUTE_META[op], "mimeType": "application/json",
+            "serviceName": "memory-mcp", "tags": ["memory", "x402", "semantic-search"]}
+
 http_routes = {
-    "GET /paid/memory/write": {**accepts("$0.001"), "extensions": declare_discovery_extension(
+    "GET /paid/memory/write": {**accepts("$0.001"), **_meta("write"), "extensions": declare_discovery_extension(
         input={"content": "User prefers metric units", "tags": "prefs"},
         input_schema={"properties": {"content": {"type": "string", "description": "Memory text to store (max 8000 chars)"},
                                      "tags": {"type": "string", "description": "Comma-separated tags"}}, "required": ["content"]},
         output=OutputConfig(example={"id": 42, "namespace": "0xabc...", "embedded": True}))},
-    "GET /paid/memory/search": {**accepts("$0.002"), "extensions": declare_discovery_extension(
+    "GET /paid/memory/search": {**accepts("$0.002"), **_meta("search"), "extensions": declare_discovery_extension(
         input={"query": "what does the user prefer?"},
         input_schema={"properties": {"query": {"type": "string", "description": "Semantic search query"},
                                      "k": {"type": "integer", "description": "Max results (default 5, cap 20)"}}, "required": ["query"]},
         output=OutputConfig(example={"namespace": "0xabc...", "results": [{"id": 42, "score": 0.83, "content": "User prefers metric units"}]}))},
-    "GET /paid/memory/export": {**accepts("$0.01"), "extensions": declare_discovery_extension(
+    "GET /paid/memory/export": {**accepts("$0.01"), **_meta("export"), "extensions": declare_discovery_extension(
         input={"offset": 0},
         input_schema={"properties": {"offset": {"type": "integer", "description": "row offset for paging past the first 1000 (default 0)"}}},
         output=OutputConfig(example={"namespace": "0xabc...", "count": 2, "offset": 0, "has_more": False, "memories": [{"id": 42, "content": "..."}]}))},
-    "GET /paid/memory/forget": {**accepts("$0.001"), "extensions": declare_discovery_extension(
+    "GET /paid/memory/forget": {**accepts("$0.001"), **_meta("forget"), "extensions": declare_discovery_extension(
         input={"ids": "41,42"},
         input_schema={"properties": {"ids": {"type": "string", "description": "Comma-separated memory ids to delete (max 100)"}},
                      "required": ["ids"]},
         output=OutputConfig(example={"namespace": "0xabc...", "requested": 2, "deleted_count": 2, "deleted_ids": [41, 42]}))},
-    "GET /paid/memory/import": {**accepts("$0.01"), "extensions": declare_discovery_extension(
+    "GET /paid/memory/import": {**accepts("$0.01"), **_meta("import"), "extensions": declare_discovery_extension(
         input={"memories": '[{"content": "User prefers metric units"}]'},
         input_schema={"properties": {"memories": {"type": "string",
                                                    "description": "JSON-encoded array of {content, tags?, ts?} (max 200 items)"}},
@@ -979,17 +993,20 @@ async def agent_card():
 async def wk_x402():
     """Machine-readable list of payable resources — what an x402 buyer parses first."""
     _entries = [("https://mem.borisinc.com" + path, price,
-                 "memory " + path.rsplit("/", 1)[-1], "GET")
+                 _ROUTE_META.get(path.rsplit("/", 1)[-1], "memory " + path.rsplit("/", 1)[-1]), "GET")
                 for path, price in HTTP_PRICES.items()]
-    _mcp_entries = [("https://mem.borisinc.com" + TOOL_HTTP_PATH.get(t, "/paid/memory/" + t.replace("memory_", "", 1)),
-                     p, "memory-mcp " + t + " (MCP tool)", "GET")
-                    for t, p in PRICES.items()]
+    # MCP tool names are an ALIAS of the same payable URLs, not extra resources --
+    # listing them again in `items` gave a buyer two payment entries for one URL.
+    _mcp_tools = {t: {"path": TOOL_HTTP_PATH.get(t, "/paid/memory/" + t.replace("memory_", "", 1)),
+                      "price": p}
+                  for t, p in PRICES.items()}
     return {"x402Version": 2, "service": "memory-mcp",
-            "items": _x402_items(_entries + _mcp_entries, NETWORK, PAY_TO),
+            "items": _x402_items(_entries, NETWORK, PAY_TO),
             "mcp": "https://mem.borisinc.com/mcp",
+            "mcpTools": _mcp_tools,
             "resources": [{"url": "https://mem.borisinc.com" + path, "method": "GET",
                            "price": price, "network": NETWORK, "payTo": PAY_TO,
-                           "description": "memory " + path.rsplit("/", 1)[-1]}
+                           "description": _ROUTE_META.get(path.rsplit("/", 1)[-1], "memory " + path.rsplit("/", 1)[-1])}
                           for path, price in HTTP_PRICES.items()],
             "free": ["/trial/memory/write", "/trial/memory/search", "/memory/stats"],
             "subscription": {"url": "https://mem.borisinc.com/subscribe", "price": "$2.00", "period_days": 30},
