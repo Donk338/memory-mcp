@@ -671,9 +671,20 @@ _ROUTE_META = {
 }
 
 
+# Every machine-readable surface (the live 402 body, the bazaar catalogue and the
+# /catalog + /.well-known listings) is built from _ROUTE_META, so the free on-ramp
+# belongs HERE: a probing agent that hits the paywall with no wallet must be able to
+# see, in the same response, that it can try us for free. Added 2026-10-03 after the
+# funnel read showed 2,656 calls / 0 settlements, all of them discovery crawlers --
+# the paid challenge was correct but silent about the zero-friction path.
+_FREE_HINT = (" Free without paying: sign 'borismem-free:<wallet>:<ts>' (EIP-191) and call "
+              "/free/memory/write or /free/memory/search -- 1000 writes + 500 searches per rolling "
+              "30 days, no payment, no account.")
+
+
 def _meta(op):
     """Description/mimeType/serviceName/tags for the x402 402 challenge + bazaar catalogue."""
-    return {"description": _ROUTE_META[op], "mimeType": "application/json",
+    return {"description": _ROUTE_META[op] + _FREE_HINT, "mimeType": "application/json",
             "serviceName": "memory-mcp", "tags": ["memory", "x402", "semantic-search"]}
 
 http_routes = {
@@ -1008,7 +1019,12 @@ async def wk_x402():
                            "price": price, "network": NETWORK, "payTo": PAY_TO,
                            "description": _ROUTE_META.get(path.rsplit("/", 1)[-1], "memory " + path.rsplit("/", 1)[-1])}
                           for path, price in HTTP_PRICES.items()],
-            "free": ["/trial/memory/write", "/trial/memory/search", "/memory/stats"],
+            "free": ["/free/memory/write", "/free/memory/search", "/trial/memory/write",
+                     "/trial/memory/search", "/memory/stats"],
+            "freeTier": {"endpoints": ["/free/memory/write", "/free/memory/search"],
+                         "auth": "EIP-191 signature of 'borismem-free:<wallet>:<ts>'",
+                         "allowance": "1000 writes + 500 searches per rolling 30 days",
+                         "cost": "0 — no payment, no account"},
             "subscription": {"url": "https://mem.borisinc.com/subscribe", "price": "$2.00", "period_days": 30},
             "guarantee": "your wallet is your namespace — no account, no API key"}
 
