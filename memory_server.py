@@ -1,6 +1,7 @@
 """memory-mcp — persistent agent memory sold per-call via x402. Port 8407.
 Namespace = payer wallet address (your wallet is your memory)."""
 import asyncio, base64, contextlib, contextvars, json, os, re, sqlite3, time
+import urllib.parse
 from pathlib import Path
 
 import httpx
@@ -1238,3 +1239,66 @@ async def head_support(request: Request, call_next):
     headers.pop("transfer-encoding", None)
     headers["content-length"] = str(len(body))
     return Response(status_code=resp.status_code, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# POST support for the GET-shaped paid routes (added 2026-10-04, attended —
+# settlement/discovery audit). x402 discovery crawlers and most HTTP agents
+# probe a resource with POST (the MCP transport is POST). Every paid route is
+# registered GET-only, so FastAPI/Starlette answered a bare POST with
+# `405 allow: GET` — the paywall never ran, no challenge was emitted — and a
+# liveness crawler grading by POST scored us dead, compounding the zero-settle
+# egg. Rewrite POST->GET for the GET-shaped surfaces and fold a flat JSON /
+# form body (or a JSON-RPC `params.arguments` envelope) into the query string,
+# so the paywall still issues its normal payable 402 and an X-PAYMENT retry
+# POST settles exactly like the GET does. /mcp is deliberately EXCLUDED — it is
+# a real POST transport routed to the MCP session manager.
+# Registered last => outermost, so the rewrite lands before the paywall and
+# before routing (same pattern as head_support below/above it).
+# ---------------------------------------------------------------------------
+_POST_AS_GET_PREFIXES = ("/paid/", "/free/", "/trial/")
+_POST_AS_GET_EXACT = ("/grant/payload", "/subscribe")
+
+
+def _post_body_params(body: bytes, ctype: str) -> dict:
+    """Flat params from a POST body: JSON object, JSON-RPC tools/call envelope,
+    or an x-www-form-urlencoded payload. Non-dict / unparseable -> {}."""
+    if not body:
+        return {}
+    if "json" in ctype:
+        try:
+            d = json.loads(body)
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(d, dict):
+            return {}
+        params = d.get("params")
+        if isinstance(params, dict) and isinstance(params.get("arguments"), dict):
+            d = params["arguments"]  # JSON-RPC tools/call envelope
+        return {k: v for k, v in d.items() if isinstance(v, (str, int, float, bool))}
+    if "form-urlencoded" in ctype:
+        try:
+            return dict(urllib.parse.parse_qsl(body.decode("utf-8", "replace")))
+        except Exception:
+            return {}
+    return {}
+
+
+@fapp.middleware("http")
+async def post_as_get(request: Request, call_next):
+    if request.method == "OPTIONS":
+        # CORS preflight / capability probe: never 405. Advertise the real verbs.
+        from fastapi.responses import Response
+        return Response(status_code=204, headers={"allow": "GET, HEAD, POST, OPTIONS"})
+    p = request.url.path
+    if request.method != "POST" or not (p.startswith(_POST_AS_GET_PREFIXES) or p in _POST_AS_GET_EXACT):
+        return await call_next(request)
+    body = await request.body()
+    params = _post_body_params(body, request.headers.get("content-type", "").lower())
+    merged = dict(request.query_params)
+    merged.update({k: ("true" if v else "false") if isinstance(v, bool) else str(v)
+                   for k, v in params.items()})
+    request.scope["method"] = "GET"
+    request.scope["_orig_method"] = "POST"
+    request.scope["query_string"] = urllib.parse.urlencode(merged).encode()
+    return await call_next(request)

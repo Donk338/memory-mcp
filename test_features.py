@@ -56,3 +56,29 @@ except ValueError: pass
 c = M._mem(); c.execute("DELETE FROM agent_wallet_cache WHERE agent_id=424242"); c.commit(); c.close()
 print("PASS remap: grants + agent-keyed namespace auth")
 print("ALL FEATURE TESTS PASS")
+
+# --- POST-as-GET on the GET-shaped paid routes (2026-10-04) --------------
+# A bare POST to a paid route used to answer `405 allow: GET` — the paywall
+# never ran, no challenge was emitted — and every x402 discovery crawler probes
+# with POST (the MCP transport is POST). The post_as_get middleware folds the
+# body into the query string and rewrites to GET so the paywall runs.
+assert M._post_body_params(b'{"query":"x","k":3}', "application/json") == {"query": "x", "k": 3}
+assert M._post_body_params(
+    b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_search","arguments":{"query":"y"}}}',
+    "application/json") == {"query": "y"}   # JSON-RPC tools/call envelope
+assert M._post_body_params(b"query=z&k=2", "application/x-www-form-urlencoded") == {"query": "z", "k": "2"}
+assert M._post_body_params(b"", "application/json") == {}
+assert M._post_body_params(b"not json", "application/json") == {}
+assert M._post_body_params(b'{"nested":{"a":1}}', "application/json") == {}  # scalars only
+print("PASS post_as_get body folding")
+
+from starlette.testclient import TestClient
+_c = TestClient(M.fapp)
+_r = _c.post("/paid/memory/search", json={"query": "x"})
+assert _r.status_code == 402, f"POST /paid/memory/search -> {_r.status_code}, want 402 (was 405)"
+_body = _r.json()
+assert _body["accepts"][0]["scheme"] == "exact" and _body["accepts"][0]["network"] == "eip155:8453"
+assert "query=x" in _body["resource"]["url"]          # body folded into the challenge URL
+# /mcp is a real POST transport and must NOT be rewritten to GET
+assert _c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).status_code != 402
+print("PASS POST -> payable 402 on paid routes; /mcp untouched")
