@@ -663,6 +663,70 @@ def _x402_items(entries, network, pay_to):
     return out
 
 HTTP_PRICES = {"/paid/memory/write": "$0.001", "/paid/memory/search": "$0.002", "/paid/memory/export": "$0.01", "/paid/memory/forget": "$0.001", "/paid/memory/import": "$0.01"}
+
+# ---------------------------------------------------------------------------
+# OpenAPI x402 discovery (x402scan spec: x-payment-info + schemas).
+#
+# x402scan reads a route's PRICE from openapi.json, NOT from the live 402 body.
+# FastAPI's generated schema carried no x-payment-info, so every mem.borisinc.com
+# entry in the x402scan catalogue showed price: None -- a dead listing no buyer
+# can act on (verified 2026-10-05: api.borisinc.com, which publishes the shape
+# below, shows "0.002000 USD"; mem.borisinc.com showed None on all 10 routes).
+# Mirror the working shape, declare the 402 response, and mark free routes
+# security:[] so the crawler skips them instead of listing them unpriced.
+# ---------------------------------------------------------------------------
+def _openapi_price(price_str):
+    """'$0.001' -> {'mode':'fixed','currency':'USD','amount':'0.001000'}."""
+    try:
+        amt = float(str(price_str).strip().lstrip("$"))
+    except Exception:
+        amt = 0.001
+    return {"mode": "fixed", "currency": "USD", "amount": f"{amt:.6f}"}
+
+
+def custom_openapi():
+    if getattr(fapp, "openapi_schema", None):
+        return fapp.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(title="memory-mcp", version="1.0.0",
+                         description=fapp.description, contact=_CONTACT, routes=fapp.routes)
+    schema["servers"] = [{"url": "https://mem.borisinc.com"}]
+    schema["info"]["x-guidance"] = (
+        "Persistent, wallet-namespaced memory for AI agents over x402 (USDC on Base). "
+        "FREE: GET /free/memory/write and /free/memory/search (EIP-191 wallet_auth "
+        "'borismem-free:<wallet>:<ts>', 1000 writes + 500 searches per rolling 30 days), "
+        "GET /trial/*, /health, /memory/stats. PAID via x402: GET /paid/memory/write ($0.001), "
+        "/paid/memory/search ($0.002), /paid/memory/export ($0.01), /paid/memory/forget "
+        "($0.001), /paid/memory/import ($0.01); subscription GET /subscribe ($2.00 / 30 days, "
+        "unlimited). Each paid route returns HTTP 402 with x402 payment requirements in the "
+        "payment-required header; the payer's wallet is its private memory namespace. "
+        "MCP transport: POST /mcp."
+    )
+    paid = dict(HTTP_PRICES)
+    paid["/subscribe"] = globals().get("SUB_PRICE", "$2.00")
+    for path, ops in schema.get("paths", {}).items():
+        for method, op in ops.items():
+            if not isinstance(op, dict):
+                continue
+            if path not in paid:
+                op["security"] = []          # free / non-payable -- crawler skips it
+                continue
+            op["x-payment-info"] = {"price": _openapi_price(paid[path]),
+                                    "protocols": [{"x402": {}}]}
+            resp = op.setdefault("responses", {})
+            resp["402"] = {"description": "Payment Required (x402 challenge, USDC on Base)"}
+            r200 = resp.get("200")
+            if not (isinstance(r200, dict) and r200.get("content")):
+                resp["200"] = {"description": "Successful JSON response",
+                               "content": {"application/json": {"schema": {
+                                   "type": "object", "additionalProperties": True}}}}
+
+
+    fapp.openapi_schema = schema
+    return schema
+
+fapp.openapi = custom_openapi
+
 _ROUTE_META = {
     "write":  "Store one memory (semantically indexed) in your wallet's private namespace. $0.001 via x402.",
     "search": "Semantic search over your wallet's private memory namespace. $0.002 via x402.",
@@ -945,9 +1009,93 @@ SHARED MEMORY (grants): namespace owner signs an EIP-712 grant (GET /grant/paylo
 MCP: https://mem.borisinc.com/mcp — memory_write / memory_search / memory_export / memory_forget / memory_import / memory_stats(free), x402 payment in _meta; agent_id/on_behalf/grant args supported.
 Discovery: /openapi.json . Human quickstart: /quickstart . 402 challenge in payment-required header."""
 
+# ---------------------------------------------------------------------------
+# MCP draft discovery -- server/discover.
+#
+# The 2026-07-28 MCP draft makes server/discover a MUST-implement method: a
+# client asks for the server's supported protocol versions, capabilities and
+# identity before sending anything else. The installed mcp lib (latest version
+# 2025-11-25) predates it, so the session manager answered every such probe with
+# -32602 "Invalid request parameters" -- a malformed-server read for any modern
+# MCP discovery scan, before tools/list is ever reached. Same class of defect as
+# the POST 405 (6dbf794): the paid surface was correct, the discovery surface
+# was silent.
+#
+# Answer it here, ahead of the session manager, from the metadata the rest of
+# the surface already publishes, and advertise ONLY the versions this server
+# really speaks -- a modern client picks one of those and otherwise falls back
+# to the legacy initialize handshake, which the mcp lib implements correctly.
+# ---------------------------------------------------------------------------
+try:
+    from importlib.metadata import version as _pkg_version
+    _SERVICE_VERSION = _pkg_version("mcp")
+except Exception:                                   # pragma: no cover
+    _SERVICE_VERSION = "unknown"
+
+_MCP_SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"]
+_MCP_DISCOVER_MAX_BODY = 65536
+_MCP_INSTRUCTIONS = (
+    "Persistent, wallet-namespaced memory for AI agents. Six tools: memory_write ($0.001), "
+    "memory_search ($0.002), memory_export ($0.01), memory_forget ($0.001) and memory_import "
+    "($0.01) are paid per call in USDC on Base via x402 (the payment goes in "
+    "_meta['x402/payment']); memory_stats is free. A paid call signed by a wallet works in that "
+    "wallet's own private namespace -- no account, no API key. Free tier: call "
+    "memory_write_free / memory_search_free with an EIP-191 wallet_auth argument "
+    "(1000 writes + 500 searches per rolling 30 days). Docs: https://mem.borisinc.com/llms.txt"
+)
+
+
+def _mcp_discover_result(mid):
+    """DiscoverResult for the MCP draft server/discover method."""
+    return {
+        "jsonrpc": "2.0",
+        "id": mid,
+        "result": {
+            "resultType": "complete",
+            "supportedVersions": list(_MCP_SUPPORTED_VERSIONS),
+            "capabilities": {"tools": {}},
+            "_meta": {"io.modelcontextprotocol/serverInfo": {
+                "name": "memory-mcp", "version": _SERVICE_VERSION}},
+            "instructions": _MCP_INSTRUCTIONS,
+        },
+    }
+
+
+def _replay_receive(body: bytes):
+    """A receive() that hands the already-read request body back to the app."""
+    done = {"v": False}
+
+    async def _recv():
+        if done["v"]:
+            return {"type": "http.disconnect"}
+        done["v"] = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return _recv
+
+
 async def app(scope, receive, send):
     if scope["type"] == "http" and (scope.get("path") == "/mcp" or scope.get("path", "").startswith("/mcp/")):
-        await session_manager.handle_request(scope, receive, send); return
+        # Buffer the (small) JSON-RPC body so server/discover can be answered
+        # before the session manager validates the method and rejects it.
+        body, more = b"", True
+        while more:
+            msg = await receive()
+            if msg.get("type") != "http.request":
+                await session_manager.handle_request(scope, _replay_receive(body), send)
+                return
+            body += msg.get("body", b"")
+            more = bool(msg.get("more_body"))
+        if len(body) <= _MCP_DISCOVER_MAX_BODY:
+            try:
+                _req = json.loads(body)
+            except Exception:
+                _req = None
+            if isinstance(_req, dict) and _req.get("method") == "server/discover":
+                await JSONResponse(_mcp_discover_result(_req.get("id", 1)))(scope, receive, send)
+                return
+        await session_manager.handle_request(scope, _replay_receive(body), send)
+        return
     await fapp(scope, receive, send)
 
 

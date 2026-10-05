@@ -82,3 +82,50 @@ assert "query=x" in _body["resource"]["url"]          # body folded into the cha
 # /mcp is a real POST transport and must NOT be rewritten to GET
 assert _c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).status_code != 402
 print("PASS POST -> payable 402 on paid routes; /mcp untouched")
+
+# --- server/discover on /mcp (2026-10-05) --------------------------------
+# The 2025-11-25 MCP draft method `server/discover` is what an agent calls
+# FIRST (no initialize, no session). The installed mcp lib does not know it,
+# so every probe used to get -32602 "Invalid request parameters" and graded
+# us dead. The shim in M.app() answers it before the session manager sees it.
+_d = M._mcp_discover_result("disc-7")["result"]
+assert _d["resultType"] == "complete" and _d["supportedVersions"][0] == "2025-11-25"
+assert _d["capabilities"] == {"tools": {}}
+assert _d["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "memory-mcp"
+assert "memory_search" in _d["instructions"]
+print("PASS _mcp_discover_result shape")
+
+with TestClient(M.app) as _dc:   # context manager runs lifespan -> session manager
+    _r = _dc.post("/mcp", headers={"accept": "application/json, text/event-stream"},
+                  json={"jsonrpc": "2.0", "id": "disc-7", "method": "server/discover", "params": {}})
+    assert _r.status_code == 200, _r.status_code
+    _j = _r.json()
+    assert "error" not in _j, _j
+    assert _j["id"] == "disc-7" and _j["result"]["capabilities"] == {"tools": {}}
+    # the same app must still serve the real transport (receive replay is not lossy)
+    _r2 = _dc.post("/mcp", headers={"accept": "application/json, text/event-stream"},
+                   json={"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                         "params": {"protocolVersion": "2025-11-25", "capabilities": {},
+                                    "clientInfo": {"name": "t", "version": "0"}}})
+    assert _r2.status_code == 200 and "serverInfo" in _r2.text, _r2.text[:200]
+print("PASS server/discover 200 on /mcp, initialize unaffected")
+
+# --- OpenAPI x402 discovery on /openapi.json (2026-10-05) ------------------
+# BUG FIXED: custom_openapi() built the schema then fell off the end with no
+# return, so /openapi.json served `null` and every crawler (x402scan) read the
+# route price as None -> dead listing. Assert the schema is real and priced.
+_o = M.fapp.openapi()
+assert isinstance(_o, dict), type(_o)
+assert _o["servers"] == [{"url": "https://mem.borisinc.com"}]
+assert _o["info"]["x-guidance"].startswith("Persistent, wallet-namespaced memory")
+for _p, _amt in (("/paid/memory/write", "0.001000"), ("/paid/memory/search", "0.002000"),
+                 ("/paid/memory/export", "0.010000"), ("/paid/memory/forget", "0.001000"),
+                 ("/paid/memory/import", "0.010000"), ("/subscribe", "2.000000")):
+    _op = _o["paths"][_p]["get"]
+    assert _op["x-payment-info"]["price"]["amount"] == _amt, (_p, _op.get("x-payment-info"))
+    assert _op["x-payment-info"]["price"]["currency"] == "USD"
+    assert "402" in _op["responses"], _p
+for _p in ("/free/memory/write", "/free/memory/search", "/health", "/memory/stats"):
+    assert _o["paths"][_p]["get"]["security"] == [], _p
+assert M.fapp.openapi() is M.fapp.openapi_schema          # cached, not rebuilt
+print("PASS /openapi.json serves a priced schema (6 paid routes, free routes security:[])")
