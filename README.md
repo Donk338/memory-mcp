@@ -55,7 +55,10 @@ wallet ownership instead of paying: `GET /free/memory/write` and
 writes into the *same* namespace your paid calls use — the free tier fills
 the real memory, not a side namespace. Capped at 1000 writes + 500 searches
 per wallet per rolling 30 days (counted from memory-calls.db); over cap
-returns 402 with a pointer to the paid tier or `/subscribe`. The IP-keyed
+returns 402 with a pointer to the paid tier or `/subscribe`. The caps are
+operator-tunable without a redeploy — env `MEM_FREE_WRITE_CAP`,
+`MEM_FREE_SEARCH_CAP`, `MEM_FREE_WINDOW_DAYS` (defaults 1000 / 500 / 30);
+`0` disables the free write/search tier. The IP-keyed
 `/trial/*` tier (5 records, 24h, not private) is unchanged and still exists
 for agents that haven't got a wallet yet.
 

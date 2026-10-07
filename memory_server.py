@@ -364,8 +364,18 @@ def t_forget(a, ns):
 # memory-calls.db (paid=0 rows tagged with these tool names), so there is no
 # separate state to drift from the ledger.
 WALLET_AUTH_WINDOW = 600  # seconds; replay window for the signed timestamp
-FREE_WRITE_CAP, FREE_SEARCH_CAP = 1000, 500
-FREE_WINDOW_DAYS = 30
+# Free-tier caps are the pay-trigger dial. Env-overridable so the trial size can
+# be tuned (or cut to a genuine trial) with a config flip, not a redeploy.
+# Defaults unchanged: 1000 writes / 500 searches per rolling 30 days.
+def _env_int(name, default):
+    try:
+        return max(0, int(os.environ[name]))
+    except (KeyError, ValueError):
+        return default
+
+FREE_WRITE_CAP = _env_int("MEM_FREE_WRITE_CAP", 1000)
+FREE_SEARCH_CAP = _env_int("MEM_FREE_SEARCH_CAP", 500)
+FREE_WINDOW_DAYS = _env_int("MEM_FREE_WINDOW_DAYS", 30)
 FREE_WRITE_TOOLS = ("memory_write_free", "http:/free/memory/write")
 FREE_SEARCH_TOOLS = ("memory_search_free", "http:/free/memory/search")
 
@@ -534,7 +544,7 @@ TOOLS = [
         description=("FREE (no payment): store a memory in YOUR namespace, proven by an EIP-191 personal_sign "
                      "instead of an x402 payment. wallet_auth = base64 JSON {address,ts,signature} where "
                      "signature = personal_sign of 'borismem-free:<address>:<ts>' (ts within 600s). Writes to the "
-                     "SAME namespace paid calls use. Capped at 1000 writes / rolling 30 days per wallet; "
+                     f"SAME namespace paid calls use. Capped at {FREE_WRITE_CAP} writes / rolling {FREE_WINDOW_DAYS} days per wallet; "
                      "over cap returns an error pointing to the paid tier."),
         inputSchema={"type": "object", "properties": {
             "content": {"type": "string", "description": "The memory text (max 8000 chars)"},
@@ -543,7 +553,7 @@ TOOLS = [
             "required": ["content", "wallet_auth"]}),
     types.Tool(name="memory_search_free",
         description=("FREE (no payment): semantic search over YOUR namespace, proven by an EIP-191 personal_sign. "
-                     "Same wallet_auth scheme as memory_write_free. Capped at 500 searches / rolling 30 days per wallet."),
+                     f"Same wallet_auth scheme as memory_write_free. Capped at {FREE_SEARCH_CAP} searches / rolling {FREE_WINDOW_DAYS} days per wallet."),
         inputSchema={"type": "object", "properties": {
             "query": {"type": "string"}, "k": {"type": "integer", "description": "max results (default 5, cap 20)"},
             "wallet_auth": {"type": "string", "description": "base64 JSON {address,ts,signature}"}},
@@ -694,7 +704,7 @@ def custom_openapi():
     schema["info"]["x-guidance"] = (
         "Persistent, wallet-namespaced memory for AI agents over x402 (USDC on Base). "
         "FREE: GET /free/memory/write and /free/memory/search (EIP-191 wallet_auth "
-        "'borismem-free:<wallet>:<ts>', 1000 writes + 500 searches per rolling 30 days), "
+        f"'borismem-free:<wallet>:<ts>', {FREE_WRITE_CAP} writes + {FREE_SEARCH_CAP} searches per rolling {FREE_WINDOW_DAYS} days), "
         "GET /trial/*, /health, /memory/stats. PAID via x402: GET /paid/memory/write ($0.001), "
         "/paid/memory/search ($0.002), /paid/memory/export ($0.01), /paid/memory/forget "
         "($0.001), /paid/memory/import ($0.01); subscription GET /subscribe ($2.00 / 30 days, "
@@ -743,8 +753,8 @@ _ROUTE_META = {
 # funnel read showed 2,656 calls / 0 settlements, all of them discovery crawlers --
 # the paid challenge was correct but silent about the zero-friction path.
 _FREE_HINT = (" Free without paying: sign 'borismem-free:<wallet>:<ts>' (EIP-191) and call "
-              "/free/memory/write or /free/memory/search -- 1000 writes + 500 searches per rolling "
-              "30 days, no payment, no account.")
+              f"/free/memory/write or /free/memory/search -- {FREE_WRITE_CAP} writes + {FREE_SEARCH_CAP} searches per rolling "
+              f"{FREE_WINDOW_DAYS} days, no payment, no account.")
 
 
 def _meta(op):
