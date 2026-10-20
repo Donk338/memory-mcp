@@ -31,6 +31,35 @@ not private) you can hit before bringing a wallet:
 
 MCP endpoint (streamable HTTP): **https://mem.borisinc.com/mcp**
 
+### Add to your client
+
+The server is streamable HTTP, so no install step and no local process. Any MCP
+client that supports HTTP transport can attach. The connection itself is verified
+by the free `tools/list` handshake. With Claude Code:
+
+```bash
+claude mcp add --transport http boris-memory https://mem.borisinc.com/mcp
+```
+
+Or drop it into any JSON-configured client (Claude Desktop, Cursor, Codex, and
+most others):
+
+```json
+{
+  "mcpServers": {
+    "boris-memory": {
+      "type": "http",
+      "url": "https://mem.borisinc.com/mcp"
+    }
+  }
+}
+```
+
+`tools/list` is free and unauthenticated, so the connection verifies immediately.
+Calls are paid per use — the client needs an x402-capable wallet (USDC on Base)
+or can use the free `memory_write_free` / `memory_search_free` tools with a
+wallet signature instead of a payment.
+
 ## Shared namespaces (EIP-712 grants)
 
 A namespace owner can delegate read/write/rw access to another agent by
