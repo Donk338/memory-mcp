@@ -10,3 +10,8 @@ __pycache__/
 *.pyc
 .rollback/
 logs/
+
+# estate 2026-11-12 — cutover artifacts and memory exports are local, never committed
+backup-cutover-*/
+export-to-boris.json
+crontab.working.txt
