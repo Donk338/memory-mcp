@@ -449,7 +449,13 @@ def free_wallet(tool, fn, tool_names, cap):
 facilitator = HTTPFacilitatorClientSync(FacilitatorConfig(url=cfg["FACILITATOR_URL"]))
 rs = x402ResourceServerSync(facilitator)
 rs.register(NETWORK, ExactEvmServerScheme())
-rs.initialize()
+RS_READY = True
+try:
+    rs.initialize()
+except Exception as _rs_ex:  # a facilitator outage must never block the bind
+    RS_READY = False
+    print(f"[memory-mcp] WARNING: x402 initialize failed ({_rs_ex}) -- booting DEGRADED; "
+          f"paid lane will 503 until the facilitator returns", flush=True)
 
 # Bazaar indexes ONLY https resources observed settling via the facilitator — mcp://
 # URIs are invisible to it. Map each paid tool to its real https path so the 402
@@ -464,9 +470,20 @@ TOOL_HTTP_PATH = {
 
 def paid(tool, price, fn):
     path = TOOL_HTTP_PATH.get(tool, "/paid/memory/" + tool.replace("memory_", "", 1))
-    wrapper = create_payment_wrapper_sync(rs, SyncPaymentWrapperConfig(
-        accepts=rs.build_payment_requirements(ResourceConfig(scheme="exact", network=NETWORK, pay_to=PAY_TO, price=price)),
-        resource=ResourceInfo(url=f"https://mem.borisinc.com{path}", description=f"memory-mcp {tool}")))
+    # A facilitator outage must degrade the paid lane, NEVER block the bind. This runs at
+    # import (the tool table below calls paid()), so an exception here = no uvicorn at all.
+    try:
+        _accepts = rs.build_payment_requirements(ResourceConfig(scheme="exact", network=NETWORK, pay_to=PAY_TO, price=price))
+        wrapper = create_payment_wrapper_sync(rs, SyncPaymentWrapperConfig(
+            accepts=_accepts,
+            resource=ResourceInfo(url=f"https://mem.borisinc.com{path}", description=f"memory-mcp {tool}")))
+    except Exception as _pe:
+        _detail = str(_pe)
+        print(f"[memory-mcp] WARNING: paid tool {tool} unavailable ({_detail}) -- paid lane 503s until the facilitator returns", flush=True)
+        def _unavailable(args, extra, _t=tool, _d=_detail):
+            log_call(_t, "UNAVAILABLE:facilitator", 0, price, time.time(), _d)
+            raise ValueError(f"paid lane unavailable: x402 facilitator unreachable ({_d})")
+        return _unavailable
     def handler(args, extra):
         def inner(a, e):
             t0 = time.time()
