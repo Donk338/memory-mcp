@@ -1284,21 +1284,34 @@ def _trial_gc():
 
 @fapp.get("/trial/memory/write", openapi_extra={"security": []})
 async def trial_write(request: Request, content: str, tags: str = ""):
+    t0 = time.time()
     _trial_gc()
     ns = _trial_ns(request)
     c = _mem(); n = c.execute("SELECT COUNT(*) FROM memories WHERE ns=?", (ns,)).fetchone()[0]; c.close()
     if n >= TRIAL_MAX:
+        log_call("http:/trial/memory/write", ns, 0, "$0", t0, f"trial cap reached ({TRIAL_MAX}/24h)")
         return JSONResponse({"error": f"trial cap reached ({TRIAL_MAX} records/24h)",
                              "upgrade": "pay per call via x402 ($0.001/write) or /subscribe ($2.00/30d) — your wallet becomes a private namespace"},
                             status_code=402)
-    out = await asyncio.to_thread(t_write, {"content": content, "tags": [t for t in tags.split(",") if t]}, ns)
+    try:
+        out = await asyncio.to_thread(t_write, {"content": content, "tags": [t for t in tags.split(",") if t]}, ns)
+    except Exception as ex:
+        log_call("http:/trial/memory/write", ns, 0, "$0", t0, str(ex))
+        raise
+    log_call("http:/trial/memory/write", ns, 0, "$0", t0)
     out["trial"] = True
     out["warning"] = "trial namespaces are IP-derived, capped, auto-deleted after 24h and NOT private — use a wallet for real memory"
     return out
 
 @fapp.get("/trial/memory/search", openapi_extra={"security": []})
 async def trial_search(request: Request, query: str, k: int = 5):
-    out = await asyncio.to_thread(t_search, {"query": query, "k": k}, _trial_ns(request))
+    t0 = time.time(); ns = _trial_ns(request)
+    try:
+        out = await asyncio.to_thread(t_search, {"query": query, "k": k}, ns)
+    except Exception as ex:
+        log_call("http:/trial/memory/search", ns, 0, "$0", t0, str(ex))
+        raise
+    log_call("http:/trial/memory/search", ns, 0, "$0", t0)
     out["trial"] = True
     return out
 
@@ -1308,6 +1321,8 @@ async def trial_search(request: Request, query: str, k: int = 5):
 # {address,ts,signature}) instead of an x402 payment. Namespace = the proven
 # wallet -- the SAME namespace paid calls use. Capped per-wallet, rolling 30d,
 # counted straight from memory-calls.db so there is no separate cap state. ----
+NO_WALLET = {"no_wallet": "no signing key? try /trial/memory/write or /trial/memory/search -- zero payment, zero wallet, 5 records/24h (IP-keyed, not private)"}
+
 @fapp.get("/free/memory/write", openapi_extra={"security": []})
 async def free_write(request: Request, content: str, tags: str = ""):
     t0 = time.time()
@@ -1315,7 +1330,7 @@ async def free_write(request: Request, content: str, tags: str = ""):
         ns = _verify_wallet_auth(request.headers.get("x-wallet-auth", ""))
     except ValueError as e:
         log_call("http:/free/memory/write", "REJECTED:no-wallet-auth", 0, "$0", t0, str(e))
-        return JSONResponse({"error": str(e)}, status_code=401)
+        return JSONResponse({"error": str(e), **NO_WALLET}, status_code=401)
     try:
         _check_free_cap(ns, FREE_WRITE_TOOLS, FREE_WRITE_CAP)
     except ValueError as e:
@@ -1338,7 +1353,7 @@ async def free_search(request: Request, query: str, k: int = 5):
         ns = _verify_wallet_auth(request.headers.get("x-wallet-auth", ""))
     except ValueError as e:
         log_call("http:/free/memory/search", "REJECTED:no-wallet-auth", 0, "$0", t0, str(e))
-        return JSONResponse({"error": str(e)}, status_code=401)
+        return JSONResponse({"error": str(e), **NO_WALLET}, status_code=401)
     try:
         _check_free_cap(ns, FREE_SEARCH_TOOLS, FREE_SEARCH_CAP)
     except ValueError as e:

@@ -70,9 +70,17 @@ def main() -> None:
     print("memory-mcp x402 funnel" + (f"  (last {a.since:g}d)" if a.since else "  (all time)"))
     print("=" * 62)
     print(f"  challenges issued (402)   {len(chall):>7}")
-    print(f"  delivered (200, paid)     {len(delivered):>7}")
+    print(f"  delivered (HTTP 200)      {len(delivered):>7}")
     print(f"  other errors              {len(other_err):>7}")
-    print(f"  ---- SETTLED REVENUE      {len(delivered):>7}")
+    # NOTE (2026-11-21): calls.paid is an HTTP STATUS (1 = the /paid/* answer was
+    # 200), NOT proof of payment. A 200 here means the x402 middleware let the call
+    # through; settlement must be confirmed on chain. Reporting this count as
+    # "settled revenue" is what produced the false 'ZERO settled' headline - the
+    # chain showed real USDC in while this ledger said zero. Verify against the
+    # USDC contract on Base, not this counter.
+    print(f"  ---- 200s (verify on chain) {len(delivered):>4}")
+    print("  chain check: USDC 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+    print("               -> payTo 0x30A535132ea7573Fd339B30FEE8b677E0ec947E0 (Base)")
     if chall:
         print(f"  conversion                {100.0 * len(delivered) / len(chall):>6.2f}%")
 
@@ -92,6 +100,22 @@ def main() -> None:
     print(f"\n  top {a.top} callers by challenge count")
     for ip, n in Counter(r[6] or "-" for r in chall).most_common(a.top):
         print(f"    {mask(ip):<20} {n:>6}")
+
+    # ---- free lane: the try-before-you-buy path. Trial needs no wallet (IP-keyed),
+    # the wallet tier needs an EIP-191 signature. Count both, blame the right gate.
+    trial = [r for r in rows if str(r[1]).startswith("http:/trial/")]
+    free = [r for r in rows if str(r[1]).startswith("http:/free/")]
+    free_ok = [r for r in free if r[3] == 0 and (r[5] or "") == ""]
+    free_nosig = [r for r in free if "wallet_auth" in (r[5] or "")]
+    trial_ok = [r for r in trial if (r[5] or "") == ""]
+    trial_cap = [r for r in trial if "trial cap" in (r[5] or "")]
+    print("\n  free lane (no payment expected)")
+    print(f"    trial used (no wallet)              {len(trial_ok):>5}")
+    print(f"    trial cap-hit (marketing signal)    {len(trial_cap):>5}")
+    print(f"    wallet-tier delivered               {len(free_ok):>5}")
+    print(f"    wallet-tier bounced at signature    {len(free_nosig):>5}")
+    if free_nosig:
+        print(f"    -> {100.0*len(free_ok)/max(1,len(free)):.1f}% of wallet-tier attempts got past the signature gate")
 
     print(f"\n  distinct callers {len({r[6] for r in chall})}   distinct UAs {len({r[7] for r in chall})}")
     if not has:
